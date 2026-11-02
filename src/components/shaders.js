@@ -132,7 +132,7 @@ export const jacketFrag = /* glsl */ `
     vec4 col = mix(plain, design, m);                 // premultiplied colours
     col.rgb *= 1.0 + clamp(shade, -0.2, 0.2) * 1.4;
     col.rgb += col.a * (max(spec, 0.0) * 0.22);
-    col.rgb += col.a * rim * vec3(0.95, 0.62, 0.28) * 0.14;   // warm thread of light at the edge
+    col.rgb += col.a * rim * vec3(0.95, 0.62, 0.28) * 0.05;   // warm thread of light at the edge
 
     // Soft drop shadow drawn in-shader (a CSS filter on the canvas caused a faint box on some GPUs)
     vec2 sUv = imgUv + vec2(0.0, 0.028);

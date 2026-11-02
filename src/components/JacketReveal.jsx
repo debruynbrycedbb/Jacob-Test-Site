@@ -5,6 +5,9 @@ import { quadVert, trailFrag, jacketFrag } from './shaders.js';
 const IMG_W = 1207;
 const IMG_H = 1303;
 const PAD = 0.06; // transparent margin so the bulge never clips at the silhouette
+// Reveal tuning: brush size (fraction of jacket height) and how fast it paints per distance moved
+const REVEAL_RADIUS = 0.24;
+const REVEAL_PER_DISTANCE = 1.8;
 
 // Reads a small alpha map so "hover" only counts when the pointer is on the jacket itself
 function buildAlphaMap(img) {
@@ -215,8 +218,13 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
       tu.uBloom.value = 0;
       tu.uMouse.value.set(mouse.x, mouse.y);
       tu.uPrevMouse.value.set(prevMouse.x, prevMouse.y);
-      tu.uRadius.value = force > 0 ? 0.6 : 0.15;
-      tu.uStrength.value = target.inside ? 0.011 * dt : force > 0 ? 0.02 * dt : 0;
+      // Reveal grows with the distance the cursor travels (not time), so it's the same for
+      // fast and slow movers: roughly 10 sweeps across the back uncover the whole design.
+      const moved = Math.hypot((mouse.x - prevMouse.x) * (TW / TH), mouse.y - prevMouse.y);
+      tu.uRadius.value = force > 0 ? 0.6 : REVEAL_RADIUS;
+      tu.uStrength.value = target.inside
+        ? Math.min(0.3, moved * REVEAL_PER_DISTANCE) + 0.002 * dt
+        : force > 0 ? 0.02 * dt : 0;
       tu.uDecay.value = 0;
       if (force > 0) {
         tu.uMouse.value.set(0.5, 0.5);

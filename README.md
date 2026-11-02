@@ -15,7 +15,7 @@ npm run build      # production build in dist/
 ## How the jacket works
 
 - `src/components/JacketReveal.jsx` — three.js on a single canvas (no React Three Fiber needed).
-  - A ping-pong render target stores the reveal: the cursor slowly paints the design in wherever it moves, and uncovered areas never re-hide.
+  - A ping-pong render target stores the reveal: the cursor paints the design in wherever it moves, scaled by distance travelled (not time), so about 10 sweeps uncover it all; uncovered areas never re-hide. Tune with `REVEAL_RADIUS` / `REVEAL_PER_DISTANCE`.
   - Textures are always sampled and then masked (never skipped with an early return) so GPUs don't draw a faint line around the image rectangle.
   - The main shader magnifies the cloth around the cursor (the bulge), lights it with an analytic normal, and blends plain denim → Sagrada design along a noisy, frayed edge.
   - Rendered at device pixel ratio (max 2) with mipmaps + anisotropic filtering, so it stays sharp on retina screens.
