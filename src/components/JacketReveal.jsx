@@ -125,8 +125,6 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
     const mouse = { x: 0.5, y: 0.5 };
     const prevMouse = { x: 0.5, y: 0.5 };
     let force = 0; // keyboard / programmatic reveal
-    let bloomStart = -1; // time of first touch; the unveil bloom grows from then on
-    const BLOOM_MS = 2600;
     let hoverEase = 0;
     let lastActive = performance.now();
     let alphaAt = () => 0;
@@ -195,6 +193,12 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
     function frame(now) {
       raf = 0;
       if (disposed) return;
+      if (!visible) return;
+      const vr = wrap.getBoundingClientRect();
+      if (vr.bottom < 0 || vr.top > window.innerHeight) {
+        raf = requestAnimationFrame(frame); // never draw off-screen, but keep listening
+        return;
+      }
       const dt = Math.min((now - last) / 16.667, 3); // frames at 60fps
       last = now;
 
@@ -206,20 +210,18 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
       mouse.x += (target.x - mouse.x) * k;
       mouse.y += (target.y - mouse.y) * k;
 
-      // Trail pass — first touch starts a bloom that unveils the whole design, permanently
+      // Trail pass — the cursor gradually paints the design in; it never fades back
       const tu = trailMat.uniforms;
-      if (bloomStart < 0 && (target.inside || force > 0)) {
-        bloomStart = now;
-        if (target.inside) tu.uOrigin.value.set(target.x, target.y);
-        else tu.uOrigin.value.set(0.5, 0.5);
-      }
-      const bt = bloomStart < 0 ? 0 : Math.min((now - bloomStart) / BLOOM_MS, 1);
-      tu.uBloom.value = bt === 0 ? 0 : 0.05 + (1 - Math.pow(1 - bt, 3)) * 1.75;
+      tu.uBloom.value = 0;
       tu.uMouse.value.set(mouse.x, mouse.y);
       tu.uPrevMouse.value.set(prevMouse.x, prevMouse.y);
-      tu.uRadius.value = 0.21;
-      tu.uStrength.value = target.inside ? 0.09 * dt : 0;
+      tu.uRadius.value = force > 0 ? 0.6 : 0.15;
+      tu.uStrength.value = target.inside ? 0.011 * dt : force > 0 ? 0.02 * dt : 0;
       tu.uDecay.value = 0;
+      if (force > 0) {
+        tu.uMouse.value.set(0.5, 0.5);
+        tu.uPrevMouse.value.set(0.5, 0.5);
+      }
       tu.uPrev.value = rtRead.texture;
       renderer.setRenderTarget(rtWrite);
       renderer.render(trailScene, camera);
@@ -237,7 +239,7 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
       rtRead = rtWrite;
       rtWrite = tmp;
 
-      if (target.inside || hoverEase > 0.002 || (bloomStart >= 0 && bt < 1)) lastActive = now;
+      if (target.inside || force > 0 || hoverEase > 0.002) lastActive = now;
       // keep animating ~3.5s after the last interaction so the reveal can heal, then sleep
       if (visible && now - lastActive < 3500) raf = requestAnimationFrame(frame);
     }
@@ -252,8 +254,11 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
 
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
-    const io = new IntersectionObserver(([entry]) => {
+    const io = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1]; // latest state wins when updates are batched
       visible = entry.isIntersecting;
+      // take the WebGL layer out of compositing entirely while off-screen
+      canvas.style.visibility = visible ? '' : 'hidden';
       if (visible) wake();
     });
     io.observe(wrap);

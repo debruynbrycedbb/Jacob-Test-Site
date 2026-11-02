@@ -1,11 +1,12 @@
-import { useId } from 'react';
-import useScrollProgress, { clamp } from '../hooks/useScrollProgress.js';
+import { useEffect, useId, useRef, useState } from 'react';
+import useScrollProgress, { clamp, useScrollHold } from '../hooks/useScrollProgress.js';
 import ImpactBar from './ImpactBar.jsx';
 import { DropIcon } from './Icons.jsx';
 
 const POOLS = 22;
 const LITRES_PER_POOL = 2.5; // million litres in an Olympic pool (50 × 25 × 2 m)
-const SAVING = 75;
+// time for the last pool to finish flooding (+ ropes) — matches the CSS transitions
+const FILL_MS = 2600;
 
 // Top-down Olympic pool (50 m × 25 m, 8 lanes). Water floods in from the starting end.
 function Pool({ on, index }) {
@@ -102,13 +103,32 @@ function Pool({ on, index }) {
 }
 
 export default function WaterSection() {
-  const [ref, progress] = useScrollProgress(400);
-  // pools appear in order between 6% and 86% of the section
-  const filled = progress < 0.06 ? 0 : Math.min(POOLS, Math.ceil(((progress - 0.06) / 0.8) * POOLS));
-  const barFill = clamp((progress - 0.04) / 0.86);
+  const [done, setDone] = useState(false);
+  const { ref, progress } = useScrollProgress({ steps: 400, done });
+  // pools appear in order between 6% and 86% of the section; the bar reaches 100% at the end
+  const filled = done ? POOLS : progress < 0.06 ? 0 : Math.min(POOLS, Math.ceil(((progress - 0.06) / 0.8) * POOLS));
+  const barFill = done ? 1 : clamp((progress - 0.04) / 0.96);
+
+  // Remember when the last pool started filling
+  const allOnAt = useRef(0);
+  useEffect(() => {
+    if (filled === POOLS && !allOnAt.current) allOnAt.current = performance.now();
+    if (filled < POOLS) allOnAt.current = 0;
+  }, [filled]);
+
+  // Finished = scrolled to the end, bar at 100% and every pool done filling
+  useEffect(() => {
+    if (done || filled < POOLS || progress < 0.995) return undefined;
+    const wait = Math.max(0, allOnAt.current + FILL_MS - performance.now()) + 350;
+    const t = setTimeout(() => setDone(true), wait);
+    return () => clearTimeout(t);
+  }, [done, filled, progress]);
+
+  // Hold the page at the end of this section until it has finished
+  useScrollHold(ref, !done);
 
   return (
-    <section ref={ref} className="scrolly scrolly--pools water" data-theme="light" aria-labelledby="water-title">
+    <section ref={ref} className={`scrolly scrolly--pools water ${done ? 'is-done' : ''}`} data-theme="light" aria-labelledby="water-title">
       <div className="scrolly__stage impact">
         <header className="impact__head">
           <div className="impact__label">
@@ -117,7 +137,7 @@ export default function WaterSection() {
           </div>
           <div className="impact__meta">
             <p className="impact__equiv">(equivalent to ~22 Olympic swimming pools)</p>
-            <ImpactBar value={SAVING * barFill} label={SAVING} color="var(--water)" />
+            <ImpactBar value={100 * barFill} label={Math.round(100 * barFill)} color="var(--water)" />
           </div>
         </header>
 

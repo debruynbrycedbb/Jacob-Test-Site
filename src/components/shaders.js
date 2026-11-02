@@ -8,8 +8,8 @@ export const quadVert = /* glsl */ `
 `;
 
 // Ping-pong "trail" pass: stores how much of the design is revealed at every point.
-// The cursor paints a soft brush, and from the first touch a bloom spreads outwards
-// until the whole back piece is unveiled. Nothing ever fades, so it never re-hides.
+// The cursor slowly paints the design in wherever it moves; nothing ever fades,
+// so whatever has been uncovered stays uncovered.
 export const trailFrag = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
@@ -80,14 +80,20 @@ export const jacketFrag = /* glsl */ `
     return s;
   }
 
+  // IMPORTANT: always sample, then mask. Skipping the texture fetch outside the image
+  // (an early return) breaks the GPU's mip-level derivatives along the image edge and
+  // draws a faint line around the image rectangle on real graphics cards.
+  float insideMask(vec2 uv) {
+    vec2 a = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+    return a.x * a.y;
+  }
+
   vec4 sampleImg(sampler2D t, vec2 imgUv) {
-    if (imgUv.x < 0.0 || imgUv.x > 1.0 || imgUv.y < 0.0 || imgUv.y > 1.0) return vec4(0.0);
-    return texture2D(t, imgUv);
+    return texture2D(t, imgUv) * insideMask(imgUv);
   }
 
   float shadowTap(vec2 uv) {
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
-    return texture2D(uPlain, uv, 4.0).a;   // mip bias = cheap wide blur
+    return texture2D(uPlain, uv, 4.0).a * insideMask(uv);   // mip bias = cheap wide blur
   }
 
   void main() {

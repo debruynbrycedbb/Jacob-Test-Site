@@ -3,6 +3,7 @@ import JacketReveal from './components/JacketReveal.jsx';
 import EarthSection from './components/EarthSection.jsx';
 import WaterSection from './components/WaterSection.jsx';
 import Co2Section from './components/Co2Section.jsx';
+import StudioSection from './components/StudioSection.jsx';
 import Menu from './components/Menu.jsx';
 import plainJacket from './assets/jacket-plain.webp';
 import designJacket from './assets/jacket-sagrada.webp';
@@ -106,6 +107,7 @@ export default function App() {
         <EarthSection />
         <WaterSection />
         <Co2Section />
+        <StudioSection />
       </main>
     </>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import useScrollProgress, { clamp } from '../hooks/useScrollProgress.js';
 import ImpactBar from './ImpactBar.jsx';
 import { CloudIcon } from './Icons.jsx';
@@ -245,7 +245,14 @@ function Road({ progressRef }) {
     function frame(now) {
       raf = 0;
       if (!visible) return;
-      const dt = Math.min((now - last) / 1000, 0.05);
+      const r = wrap.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) {
+        // briefly off-screen (e.g. while a finished section collapses): skip, don't stop
+        last = now;
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      const dt = Math.min((now - last) / 1000, 0.25); // keep real-time speed even on slow frames
       last = now;
       if (reduce) seedStatic();
       else step(dt);
@@ -253,7 +260,8 @@ function Road({ progressRef }) {
       raf = requestAnimationFrame(frame);
     }
 
-    const io = new IntersectionObserver(([e]) => {
+    const io = new IntersectionObserver((entries) => {
+      const e = entries[entries.length - 1]; // latest state wins when updates are batched
       visible = e.isIntersecting;
       if (visible && !raf) {
         last = performance.now();
@@ -283,13 +291,17 @@ function Road({ progressRef }) {
 }
 
 export default function Co2Section() {
-  const [ref, progress, progressRef] = useScrollProgress(400);
-  const cars = Math.round(clamp((progress - 0.06) / 0.8) * CARS);
+  const [done, setDone] = useState(false);
+  const { ref, progress, progressRef } = useScrollProgress({ steps: 400, done });
+  const cars = done ? CARS : Math.round(clamp((progress - 0.06) / 0.8) * CARS);
+  useEffect(() => {
+    if (!done && progress >= 0.995) setDone(true);
+  }, [progress, done]);
   const tonnes = Math.round((TONNES * cars) / CARS);
-  const barFill = clamp((progress - 0.04) / 0.86);
+  const barFill = done ? 1 : clamp((progress - 0.04) / 0.86);
 
   return (
-    <section ref={ref} className="scrolly scrolly--road co2" data-theme="light" aria-labelledby="co2-title">
+    <section ref={ref} className={`scrolly scrolly--road co2 ${done ? 'is-done' : ''}`} data-theme="light" aria-labelledby="co2-title">
       <div className="scrolly__stage impact">
         <header className="impact__head">
           <div className="impact__label">

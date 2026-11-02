@@ -98,11 +98,26 @@ for (const vp of [
   const hovered = await saturationOf(page);
   check(hovered.sat > idle.sat * 1.25, `[${vp.name}] hover reveals the Sagrada design (colour ${idle.sat.toFixed(1)} -> ${hovered.sat.toFixed(1)})`);
 
-  // Leave: the design stays unveiled (and finishes blooming across the whole back)
+  // Slow reveal: a short hover only uncovers part of the back, and it never re-hides
+  const halfway = hovered.sat;
   if (!vp.hasTouch) await page.mouse.move(20, vp.height - 20);
-  await page.waitForTimeout(3200);
+  else await page.locator('.jacket').evaluate((el) => el.__jacket.pointAt(0.02, 0.02));
+  await page.waitForTimeout(3000);
   const after = await saturationOf(page);
-  check(after.sat >= hovered.sat * 0.95, `[${vp.name}] design stays revealed after leaving (${after.sat.toFixed(1)})`);
+  check(after.sat >= halfway * 0.9, `[${vp.name}] uncovered design stays after leaving (${after.sat.toFixed(1)})`);
+  // keep painting: more of the design comes through the longer you hover
+  if (!vp.hasTouch) {
+    const jb = await page.locator('.jacket').boundingBox();
+    for (let pass = 0; pass < 3; pass++)
+      for (let i = 0; i < 40; i++) {
+        await page.mouse.move(jb.x + jb.width * (0.35 + 0.3 * (i / 40)), jb.y + jb.height * (0.3 + pass * 0.12));
+        await page.waitForTimeout(25);
+      }
+    await page.mouse.move(20, vp.height - 20);
+    await page.waitForTimeout(500);
+    const more = await saturationOf(page);
+    check(more.sat > after.sat * 1.1, `[${vp.name}] more hovering reveals more (${after.sat.toFixed(1)} -> ${more.sat.toFixed(1)})`);
+  }
   await page.screenshot({ path: `${OUT}/${vp.name}-2b-revealed.png` });
 
   // Menu
@@ -136,25 +151,42 @@ for (const vp of [
   await scrollTo('.earth', 0.9);
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${OUT}/${vp.name}-4-earth-b.png` });
+  await scrollTo('.earth', 1);
+  await page.waitForTimeout(500);
   const kg = await page.locator('.earth__kg').innerText();
   check(kg.replace(/\s/g, '') === '+5,475KG', `[${vp.name}] earth counter reaches +5,475KG (${kg})`);
+  check(await page.locator('.earth.is-done').count() === 1, `[${vp.name}] earth section finishes and collapses`);
 
   await scrollTo('.water', 0.35);
   await page.waitForTimeout(2200);
   await page.screenshot({ path: `${OUT}/${vp.name}-5-pools-mid.png` });
   const midPools = await page.locator('.pool.is-on').count();
   check(midPools > 3 && midPools < 22, `[${vp.name}] pools appear progressively (${midPools} at 35%)`);
-  await scrollTo('.water', 0.98);
-  await page.waitForTimeout(2600);
+
+  // Fast scroll to the end of the water section, then try to keep going
+  await scrollTo('.water', 1);
+  const yHold = await page.evaluate(() => window.scrollY);
+  if (vp.hasTouch) await page.evaluate(() => window.scrollBy(0, 800));
+  else { await page.mouse.move(vp.width / 2, vp.height / 2); await page.mouse.wheel(0, 800); }
+  await page.waitForTimeout(300);
+  const yTry = await page.evaluate(() => window.scrollY);
+  check(Math.abs(yTry - yHold) < 4, `[${vp.name}] page is held at the pools until they finish (${yHold} -> ${yTry})`);
+  const barMid = await page.locator('.water .impact-bar__fill').innerText();
+  check(barMid.includes('100%'), `[${vp.name}] water bar reaches 100% at the end of the scroll`);
+  await page.waitForTimeout(3300);
   await page.screenshot({ path: `${OUT}/${vp.name}-5-pools-full.png` });
-  check((await page.locator('.pool.is-on').count()) === 22, `[${vp.name}] all 22 pools filled at the end`);
-  const bar = await page.locator('.water .impact-bar__fill').innerText();
-  check(bar.includes('75%'), `[${vp.name}] water savings bar reaches 75%`);
+  check((await page.locator('.pool.is-on').count()) === 22, `[${vp.name}] all 22 pools filled`);
+  check(await page.locator('.water.is-done').count() === 1, `[${vp.name}] water section finishes, page released`);
+  const before = await page.evaluate(() => window.scrollY);
+  if (vp.hasTouch) await page.evaluate(() => window.scrollBy(0, 400));
+  else await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(400);
+  check((await page.evaluate(() => window.scrollY)) > before + 100, `[${vp.name}] can scroll on after the pools finish`);
 
   await scrollTo('.co2', 0.4);
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${OUT}/${vp.name}-6-road-mid.png` });
-  await scrollTo('.co2', 0.98);
+  await scrollTo('.co2', 1);
   await page.waitForTimeout(9000);
   await page.screenshot({ path: `${OUT}/${vp.name}-6-road-full.png` });
   const road = await page.locator('.road').evaluate((el) => ({ cars: el.__road.cars(), wanted: el.__road.wanted() }));
@@ -162,6 +194,30 @@ for (const vp of [
   check(road.cars >= 28, `[${vp.name}] cars are on the road (${road.cars} driving)`);
   const co2bar = await page.locator('.co2 .impact-bar__fill').innerText();
   check(co2bar.includes('80%'), `[${vp.name}] CO2 savings bar reaches 80%`);
+  check(await page.locator('.co2.is-done').count() === 1, `[${vp.name}] CO2 section finishes and collapses`);
+
+  // Studio video, full screen at the bottom
+  await page.evaluate(() => document.querySelector('.studio').scrollIntoView());
+  await page.waitForFunction(() => document.querySelector('.studio__video').readyState >= 2, null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(500);
+  const vid = await page.locator('.studio__video').evaluate((v) => {
+    const r = v.getBoundingClientRect();
+    return { playing: !v.paused, ready: v.readyState, w: r.width, h: r.height };
+  });
+  check(vid.w === vp.width && Math.abs(vid.h - vp.height) < 2 && vid.ready >= 2, `[${vp.name}] studio loop fills the screen (${vid.w}x${vid.h}, ready ${vid.ready}, playing ${vid.playing})`);
+  await page.screenshot({ path: `${OUT}/${vp.name}-7-studio.png` });
+
+  // Scroll back to the top: nothing replays, sections are one screen each
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(500);
+  const state = await page.evaluate(() => ({
+    pools: document.querySelectorAll('.pool.is-on').length,
+    kg: document.querySelector('.earth__kg').innerText,
+    heights: ['.earth', '.water', '.co2'].map((s) => document.querySelector(s).offsetHeight),
+    vh: window.innerHeight,
+  }));
+  check(state.pools === 22 && state.kg.replace(/\s/g, '') === '+5,475KG', `[${vp.name}] finished sections stay finished after scrolling back up`);
+  check(state.heights.every((h) => Math.abs(h - state.vh) < 2), `[${vp.name}] no replay scrolling: each finished section is one screen (${state.heights.join(', ')})`);
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, `[${vp.name}] no horizontal scroll`);

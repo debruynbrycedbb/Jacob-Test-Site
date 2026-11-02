@@ -145,15 +145,27 @@ function Globe({ progressRef }) {
       return Math.abs(target - prev) > 0.0005;
     }
 
+    const onScreen = () => {
+      const r = wrap.getBoundingClientRect();
+      return r.bottom > 0 && r.top < window.innerHeight;
+    };
+
     function loop() {
       raf = 0;
       if (!visible || disposed) return;
+      if (!onScreen()) {
+        raf = requestAnimationFrame(loop); // skip drawing, keep listening
+        return;
+      }
       render(false);
       raf = requestAnimationFrame(loop);
     }
 
-    const io = new IntersectionObserver(([e]) => {
+    const io = new IntersectionObserver((entries) => {
+      const e = entries[entries.length - 1]; // latest state wins when updates are batched
       visible = e.isIntersecting;
+      // take the WebGL layer out of compositing entirely while off-screen
+      canvas.style.visibility = visible ? '' : 'hidden';
       if (visible && !raf) raf = requestAnimationFrame(loop);
     });
     io.observe(wrap);
@@ -185,12 +197,16 @@ function Globe({ progressRef }) {
 }
 
 export default function EarthSection() {
-  const [ref, progress, progressRef] = useScrollProgress(600);
-  // Count up over the middle of the section
-  const kg = Math.round(TOTAL_KG * clamp((progress - 0.1) / 0.65));
+  const [done, setDone] = useState(false);
+  const { ref, progress, progressRef } = useScrollProgress({ steps: 600, done });
+  // Count up over the middle of the section; once finished it stays put
+  const kg = done ? TOTAL_KG : Math.round(TOTAL_KG * clamp((progress - 0.1) / 0.65));
+  useEffect(() => {
+    if (!done && progress >= 0.995) setDone(true);
+  }, [progress, done]);
 
   return (
-    <section ref={ref} className="scrolly earth" aria-labelledby="earth-title">
+    <section ref={ref} className={`scrolly earth ${done ? 'is-done' : ''}`} aria-labelledby="earth-title">
       <div className="scrolly__stage earth__stage">
         <div className="earth__stars" aria-hidden="true" />
         <h2 id="earth-title" className="impact-title earth__title">
