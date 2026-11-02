@@ -10,6 +10,7 @@
     "test": "node tests/hero.test.mjs"
   },
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.1.0",
     "@fontsource/poppins": "^5.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

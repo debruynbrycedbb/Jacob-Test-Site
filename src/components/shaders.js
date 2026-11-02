@@ -8,8 +8,8 @@ export const quadVert = /* glsl */ `
 `;
 
 // Ping-pong "trail" pass: stores how much of the design is revealed at every point.
-// Each frame it fades a little and stamps a soft brush along the pointer's path,
-// so the reveal grows while you hover and slowly heals when you leave.
+// The cursor paints a soft brush, and from the first touch a bloom spreads outwards
+// until the whole back piece is unveiled. Nothing ever fades, so it never re-hides.
 export const trailFrag = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
@@ -20,6 +20,8 @@ export const trailFrag = /* glsl */ `
   uniform float uRadius;
   uniform float uStrength;
   uniform float uDecay;
+  uniform vec2 uOrigin;     // where the jacket was first touched
+  uniform float uBloom;     // bloom radius, grows from 0 to cover the whole jacket
 
   float segDist(vec2 p, vec2 a, vec2 b) {
     vec2 pa = p - a, ba = b - a;
@@ -36,7 +38,10 @@ export const trailFrag = /* glsl */ `
     float stamp = (1.0 - smoothstep(0.0, uRadius, d));
     stamp *= stamp;
 
-    float v = min(prev + stamp * uStrength, 1.0);
+    float bloomD = length((vUv - uOrigin) * asp);
+    float bloom = 1.0 - smoothstep(uBloom - 0.22, uBloom, bloomD);
+
+    float v = min(max(prev + stamp * uStrength, bloom), 1.0);
     gl_FragColor = vec4(v, 0.0, 0.0, 1.0);
   }
 `;
@@ -80,6 +85,11 @@ export const jacketFrag = /* glsl */ `
     return texture2D(t, imgUv);
   }
 
+  float shadowTap(vec2 uv) {
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
+    return texture2D(uPlain, uv, 4.0).a;   // mip bias = cheap wide blur
+  }
+
   void main() {
     vec2 asp = vec2(uAspect, 1.0);
     vec2 d = (vUv - uMouse) * asp;
@@ -118,6 +128,18 @@ export const jacketFrag = /* glsl */ `
     col.rgb += col.a * (max(spec, 0.0) * 0.22);
     col.rgb += col.a * rim * vec3(0.95, 0.62, 0.28) * 0.14;   // warm thread of light at the edge
 
+    // Soft drop shadow drawn in-shader (a CSS filter on the canvas caused a faint box on some GPUs)
+    vec2 sUv = imgUv + vec2(0.0, 0.028);
+    float sh = 0.0;
+    sh += shadowTap(sUv + vec2(-0.012, 0.0));
+    sh += shadowTap(sUv + vec2(0.012, 0.0));
+    sh += shadowTap(sUv + vec2(0.0, -0.012));
+    sh += shadowTap(sUv + vec2(0.0, 0.012));
+    sh += shadowTap(sUv) * 2.0;
+    sh = sh / 6.0 * 0.42;
+    col += (1.0 - col.a) * vec4(0.0, 0.0, 0.0, sh);
+
+    if (col.a < 0.004) col = vec4(0.0);
     gl_FragColor = col;
   }
 `;

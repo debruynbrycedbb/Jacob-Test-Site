@@ -87,7 +87,9 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
         uAspect: { value: TW / TH },
         uRadius: { value: 0.21 },
         uStrength: { value: 0 },
-        uDecay: { value: 0.01 },
+        uDecay: { value: 0 },
+        uOrigin: { value: new THREE.Vector2(0.5, 0.5) },
+        uBloom: { value: 0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -123,6 +125,8 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
     const mouse = { x: 0.5, y: 0.5 };
     const prevMouse = { x: 0.5, y: 0.5 };
     let force = 0; // keyboard / programmatic reveal
+    let bloomStart = -1; // time of first touch; the unveil bloom grows from then on
+    const BLOOM_MS = 2600;
     let hoverEase = 0;
     let lastActive = performance.now();
     let alphaAt = () => 0;
@@ -195,28 +199,27 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
       last = now;
 
       const wantHover = target.inside ? 1 : 0;
-      hoverEase += (Math.max(wantHover, force * 0.6) - hoverEase) * (1 - Math.pow(1 - 0.09, dt));
+      hoverEase += (wantHover - hoverEase) * (1 - Math.pow(1 - 0.09, dt));
       prevMouse.x = mouse.x;
       prevMouse.y = mouse.y;
       const k = 1 - Math.pow(1 - 0.2, dt);
       mouse.x += (target.x - mouse.x) * k;
       mouse.y += (target.y - mouse.y) * k;
 
-      // Trail pass
+      // Trail pass — first touch starts a bloom that unveils the whole design, permanently
       const tu = trailMat.uniforms;
-      if (force > 0.01) {
-        tu.uMouse.value.set(0.5, 0.48);
-        tu.uPrevMouse.value.set(0.5, 0.52);
-        tu.uRadius.value = 0.55 * force;
-        tu.uStrength.value = 0.08 * dt;
-        tu.uDecay.value = 0;
-      } else {
-        tu.uMouse.value.set(mouse.x, mouse.y);
-        tu.uPrevMouse.value.set(prevMouse.x, prevMouse.y);
-        tu.uRadius.value = 0.21;
-        tu.uStrength.value = target.inside ? 0.09 * dt : 0;
-        tu.uDecay.value = (target.inside ? 0.0025 : 0.009) * dt;
+      if (bloomStart < 0 && (target.inside || force > 0)) {
+        bloomStart = now;
+        if (target.inside) tu.uOrigin.value.set(target.x, target.y);
+        else tu.uOrigin.value.set(0.5, 0.5);
       }
+      const bt = bloomStart < 0 ? 0 : Math.min((now - bloomStart) / BLOOM_MS, 1);
+      tu.uBloom.value = bt === 0 ? 0 : 0.05 + (1 - Math.pow(1 - bt, 3)) * 1.75;
+      tu.uMouse.value.set(mouse.x, mouse.y);
+      tu.uPrevMouse.value.set(prevMouse.x, prevMouse.y);
+      tu.uRadius.value = 0.21;
+      tu.uStrength.value = target.inside ? 0.09 * dt : 0;
+      tu.uDecay.value = 0;
       tu.uPrev.value = rtRead.texture;
       renderer.setRenderTarget(rtWrite);
       renderer.render(trailScene, camera);
@@ -234,7 +237,7 @@ export default function JacketReveal({ plainSrc, designSrc, label }) {
       rtRead = rtWrite;
       rtWrite = tmp;
 
-      if (target.inside || force > 0 || hoverEase > 0.002) lastActive = now;
+      if (target.inside || hoverEase > 0.002 || (bloomStart >= 0 && bt < 1)) lastActive = now;
       // keep animating ~3.5s after the last interaction so the reveal can heal, then sleep
       if (visible && now - lastActive < 3500) raf = requestAnimationFrame(frame);
     }

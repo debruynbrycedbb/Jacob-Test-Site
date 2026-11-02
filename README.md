@@ -15,7 +15,7 @@ npm run build      # production build in dist/
 ## How the jacket works
 
 - `src/components/JacketReveal.jsx` — three.js on a single canvas (no React Three Fiber needed).
-  - A ping-pong render target stores a "reveal trail": the brush grows while you hover and slowly heals after you leave.
+  - A ping-pong render target stores the reveal: the first touch starts a bloom that spreads until the whole back piece is unveiled, and it never re-hides.
   - The main shader magnifies the cloth around the cursor (the bulge), lights it with an analytic normal, and blends plain denim → Sagrada design along a noisy, frayed edge.
   - Rendered at device pixel ratio (max 2) with mipmaps + anisotropic filtering, so it stays sharp on retina screens.
   - Hover only counts on the jacket itself (alpha-tested), not its bounding box.
@@ -23,6 +23,16 @@ npm run build      # production build in dist/
   - Stops rendering when idle or off-screen; falls back to plain images if WebGL is unavailable.
 - `src/components/shaders.js` — the GLSL.
 - `src/assets/jacket-plain.webp` / `jacket-sagrada.webp` — the two pixel-aligned layers. The plain one was made from the Sagrada image by removing the painting and refilling it with matching denim texture, so the two line up exactly.
+
+## Impact sections (scroll-driven)
+
+Each section is a tall block with a sticky stage; `src/hooks/useScrollProgress.js` turns scroll position into 0 → 1 progress.
+
+- `EarthSection.jsx` — colour Earth (NASA Blue Marble texture, bump + ocean specular, clouds, atmosphere) that turns 1.5 times as you scroll; the weight counts up to +5,475KG.
+- `WaterSection.jsx` — "55 million liters of water saved": 22 Olympic pools (50 × 25 m, 8 lanes) appear in order and each floods with water; savings bar runs to 75%.
+- `Co2Section.jsx` — "147 tons of CO₂ less": a two-way road where cars join traffic one by one up to 32, each trailing exhaust smoke; savings bar runs to 80%.
+
+Figures come from the brand's own impact section.
 
 ## Menu
 

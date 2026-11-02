@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import JacketReveal from './components/JacketReveal.jsx';
+import EarthSection from './components/EarthSection.jsx';
+import WaterSection from './components/WaterSection.jsx';
+import Co2Section from './components/Co2Section.jsx';
 import Menu from './components/Menu.jsx';
 import plainJacket from './assets/jacket-plain.webp';
 import designJacket from './assets/jacket-sagrada.webp';
@@ -11,13 +14,39 @@ export default function App() {
   const [touch, setTouch] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
+  const [lightBar, setLightBar] = useState(false);
+
   useEffect(() => {
     setTouch(window.matchMedia('(hover: none)').matches);
   }, []);
 
+  // Switch the fixed bar to dark ink while a light section sits under it
+  useEffect(() => {
+    let raf = 0;
+    const check = () => {
+      raf = 0;
+      const y = 40;
+      const light = [...document.querySelectorAll('[data-theme="light"]')].some((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top <= y && r.bottom > y;
+      });
+      setLightBar(light);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
   return (
     <>
-      <header className="topbar">
+      <header className={`topbar ${lightBar ? 'is-light' : ''}`}>
         <button
           type="button"
           className={`menu-toggle ${menuOpen ? 'is-open' : ''}`}
@@ -73,6 +102,10 @@ export default function App() {
             {touch ? 'Touch the jacket to reveal the back piece' : 'Hover over the jacket to reveal the back piece'}
           </p>
         </section>
+
+        <EarthSection />
+        <WaterSection />
+        <Co2Section />
       </main>
     </>
   );

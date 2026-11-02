@@ -66,3 +66,28 @@ export const ThreadsIcon = (p) => (
     <path d="M18.8 7.4C17.5 4.9 15.1 3.5 12 3.5 7 3.5 4 6.9 4 12s3 8.5 8 8.5c3.4 0 6-1.8 6.7-4.6.5-2.1-.3-3.7-2.1-4.6" />
   </svg>
 );
+
+// Impact icons: line drawing with a coloured disc behind, echoing the brand's impact section
+export const DropIcon = (p) => (
+  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false" {...p}>
+    <circle cx="22" cy="24" r="14" style={{ fill: 'var(--water)' }} />
+    <path d="M30 8c8 11 14 19 14 28a14 14 0 0 1-28 0c0-9 6-17 14-28Z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" />
+    <path d="M23 38a8 8 0 0 0 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    <path d="M50 22c3 4 5 7 5 10a5 5 0 0 1-10 0c0-3 2-6 5-10Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+  </svg>
+);
+
+export const CloudIcon = (p) => (
+  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false" {...p}>
+    <circle cx="22" cy="24" r="14" style={{ fill: 'var(--co2)' }} />
+    <path
+      d="M18 46h28a8 8 0 0 0 1-16 11 11 0 0 0-21-3 9 9 0 0 0-8 19Z"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinejoin="round"
+    />
+    <text x="24" y="42" fontSize="10" fontFamily="Poppins, sans-serif" fontWeight="600" fill="currentColor">CO₂</text>
+    <circle cx="14" cy="54" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+    <circle cx="52" cy="52" r="2" stroke="currentColor" strokeWidth="1.8" />
+  </svg>
+);

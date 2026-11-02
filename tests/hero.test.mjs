@@ -58,6 +58,25 @@ for (const vp of [
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${OUT}/${vp.name}-1-idle.png` });
 
+  // No faint box: the canvas must be fully transparent away from the jacket.
+  // Compare the corners of the image area with the canvas shown vs hidden.
+  {
+    const jb = await page.locator('.jacket').boundingBox();
+    const corners = [
+      { x: jb.x + jb.width * 0.03, y: jb.y + jb.height * 0.03 },
+      { x: jb.x + jb.width * 0.88, y: jb.y + jb.height * 0.03 },
+      { x: jb.x + jb.width * 0.03, y: jb.y + jb.height * 0.9 },
+    ].map((c) => ({ ...c, width: jb.width * 0.09, height: jb.height * 0.07 }));
+    const grab = async () => Promise.all(corners.map(async (clip) => PNG.sync.read(await page.screenshot({ clip })).data));
+    const withCanvas = await grab();
+    await page.addStyleTag({ content: '.jacket__canvas{visibility:hidden!important}' });
+    const without = await grab();
+    await page.addStyleTag({ content: '.jacket__canvas{visibility:visible!important}' });
+    let maxDiff = 0;
+    withCanvas.forEach((a, k) => { for (let i = 0; i < a.length; i++) maxDiff = Math.max(maxDiff, Math.abs(a[i] - without[k][i])); });
+    check(maxDiff <= 3, `[${vp.name}] no visible box around the jacket (max pixel difference ${maxDiff})`);
+  }
+
   const idle = await saturationOf(page);
   check(idle.sat < 25, `[${vp.name}] jacket starts as plain grey denim (colour ${idle.sat.toFixed(1)})`);
 
@@ -79,13 +98,12 @@ for (const vp of [
   const hovered = await saturationOf(page);
   check(hovered.sat > idle.sat * 1.25, `[${vp.name}] hover reveals the Sagrada design (colour ${idle.sat.toFixed(1)} -> ${hovered.sat.toFixed(1)})`);
 
-  // Leave: reveal heals back to plain denim
-  if (!vp.hasTouch) {
-    await page.mouse.move(20, vp.height - 20);
-    await page.waitForTimeout(3200);
-    const healed = await saturationOf(page);
-    check(healed.sat < hovered.sat * 0.8, `[${vp.name}] reveal fades after leaving (${healed.sat.toFixed(1)})`);
-  }
+  // Leave: the design stays unveiled (and finishes blooming across the whole back)
+  if (!vp.hasTouch) await page.mouse.move(20, vp.height - 20);
+  await page.waitForTimeout(3200);
+  const after = await saturationOf(page);
+  check(after.sat >= hovered.sat * 0.95, `[${vp.name}] design stays revealed after leaving (${after.sat.toFixed(1)})`);
+  await page.screenshot({ path: `${OUT}/${vp.name}-2b-revealed.png` });
 
   // Menu
   await page.locator('.menu-toggle').click();
@@ -100,6 +118,50 @@ for (const vp of [
   await page.keyboard.press('Escape');
   await page.waitForTimeout(700);
   check((await page.locator('.menu-toggle').getAttribute('aria-expanded')) === 'false', `[${vp.name}] Escape closes the menu`);
+
+  // Scroll sections
+  const scrollTo = async (sel, frac) => {
+    await page.evaluate(([sel, frac]) => {
+      const el = document.querySelector(sel);
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo(0, top + (el.offsetHeight - window.innerHeight) * frac);
+    }, [sel, frac]);
+    await page.waitForTimeout(400);
+  };
+
+  await scrollTo('.earth', 0.05);
+  await page.waitForSelector('.globe.is-ready', { timeout: 15000 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/${vp.name}-4-earth-a.png` });
+  await scrollTo('.earth', 0.9);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${OUT}/${vp.name}-4-earth-b.png` });
+  const kg = await page.locator('.earth__kg').innerText();
+  check(kg.replace(/\s/g, '') === '+5,475KG', `[${vp.name}] earth counter reaches +5,475KG (${kg})`);
+
+  await scrollTo('.water', 0.35);
+  await page.waitForTimeout(2200);
+  await page.screenshot({ path: `${OUT}/${vp.name}-5-pools-mid.png` });
+  const midPools = await page.locator('.pool.is-on').count();
+  check(midPools > 3 && midPools < 22, `[${vp.name}] pools appear progressively (${midPools} at 35%)`);
+  await scrollTo('.water', 0.98);
+  await page.waitForTimeout(2600);
+  await page.screenshot({ path: `${OUT}/${vp.name}-5-pools-full.png` });
+  check((await page.locator('.pool.is-on').count()) === 22, `[${vp.name}] all 22 pools filled at the end`);
+  const bar = await page.locator('.water .impact-bar__fill').innerText();
+  check(bar.includes('75%'), `[${vp.name}] water savings bar reaches 75%`);
+
+  await scrollTo('.co2', 0.4);
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${OUT}/${vp.name}-6-road-mid.png` });
+  await scrollTo('.co2', 0.98);
+  await page.waitForTimeout(9000);
+  await page.screenshot({ path: `${OUT}/${vp.name}-6-road-full.png` });
+  const road = await page.locator('.road').evaluate((el) => ({ cars: el.__road.cars(), wanted: el.__road.wanted() }));
+  check(road.wanted === 32, `[${vp.name}] road wants 32 cars at the end (${road.wanted})`);
+  check(road.cars >= 28, `[${vp.name}] cars are on the road (${road.cars} driving)`);
+  const co2bar = await page.locator('.co2 .impact-bar__fill').innerText();
+  check(co2bar.includes('80%'), `[${vp.name}] CO2 savings bar reaches 80%`);
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, `[${vp.name}] no horizontal scroll`);
